@@ -430,12 +430,14 @@ fn connection_pipeline(
                     return;
                 };
 
-                event_queue.lock().push_back(ClientCoreEvent::Haptics {
-                    device_id: haptics.device_id,
-                    duration: haptics.duration,
-                    frequency: haptics.frequency,
-                    amplitude: haptics.amplitude,
-                });
+                if haptics.frequency > 0.0 && haptics.amplitude > 0.0 {
+                    event_queue.lock().push_back(ClientCoreEvent::Haptics {
+                        device_id: haptics.device_id,
+                        duration: haptics.duration,
+                        frequency: haptics.frequency,
+                        amplitude: haptics.amplitude,
+                    });
+                }
             }
         }
     });

@@ -16,6 +16,7 @@ const int MAX_PROGRAM_UNIFORMS = 8;
 const int MAX_PROGRAM_TEXTURES = 8;
 const int HUD_TEXTURE_WIDTH = 1280;
 const int HUD_TEXTURE_HEIGHT = 720;
+constexpr bool DIRECT_EXTERNAL_OES_AB_TEST = true;
 
 /// Integer version of ovrRectf
 typedef struct Recti_ {
@@ -77,6 +78,7 @@ typedef struct {
     std::unique_ptr<FFR> ffr;
     std::unique_ptr<SrgbCorrectionPass> srgbCorrectionPass;
     bool enableFFE;
+    bool useExternalStreamTexture;
     GLuint streamRenderTexture;
 } ovrRenderer;
 
@@ -191,6 +193,18 @@ in lowp vec2 uv;
 in lowp vec4 fragmentColor;
 out lowp vec4 outColor;
 uniform sampler2D Texture0;
+void main()
+{
+    outColor = texture(Texture0, uv);
+}
+)glsl";
+
+static const char FRAGMENT_EXTERNAL_OES_SHADER[] = R"glsl(
+#extension GL_OES_EGL_image_external_essl3 : require
+in lowp vec2 uv;
+in lowp vec4 fragmentColor;
+out lowp vec4 outColor;
+uniform samplerExternalOES Texture0;
 void main()
 {
     outColor = texture(Texture0, uv);
@@ -581,20 +595,29 @@ void ovrRenderer_Create(ovrRenderer *renderer,
                         FFRData ffrData,
                         bool isLobby,
                         float encodingGamma) {
+    renderer->useExternalStreamTexture = false;
     if (!isLobby) {
-        renderer->srgbCorrectionPass = std::make_unique<SrgbCorrectionPass>(streamTexture);
         renderer->enableFFE = ffrData.enabled;
-        if (renderer->enableFFE) {
-            FoveationVars fv = CalculateFoveationVars(ffrData);
-            renderer->srgbCorrectionPass->Initialize(
-                fv.optimizedEyeWidth, fv.optimizedEyeHeight, encodingGamma);
-            renderer->ffr = std::make_unique<FFR>(renderer->srgbCorrectionPass->GetOutputTexture());
-            renderer->ffr->Initialize(fv);
-            renderer->streamRenderTexture = renderer->ffr->GetOutputTexture()->GetGLTexture();
+        renderer->useExternalStreamTexture =
+            DIRECT_EXTERNAL_OES_AB_TEST && !renderer->enableFFE;
+        if (renderer->useExternalStreamTexture) {
+            renderer->streamRenderTexture = streamTexture->GetGLTexture();
+            LOGI("[STREAM-AB] Direct OES sampling enabled; bypassing sRGB correction");
         } else {
-            renderer->srgbCorrectionPass->Initialize(width, height, encodingGamma);
-            renderer->streamRenderTexture =
-                renderer->srgbCorrectionPass->GetOutputTexture()->GetGLTexture();
+            renderer->srgbCorrectionPass = std::make_unique<SrgbCorrectionPass>(streamTexture);
+            if (renderer->enableFFE) {
+                FoveationVars fv = CalculateFoveationVars(ffrData);
+                renderer->srgbCorrectionPass->Initialize(
+                    fv.optimizedEyeWidth, fv.optimizedEyeHeight, encodingGamma);
+                renderer->ffr =
+                    std::make_unique<FFR>(renderer->srgbCorrectionPass->GetOutputTexture());
+                renderer->ffr->Initialize(fv);
+                renderer->streamRenderTexture = renderer->ffr->GetOutputTexture()->GetGLTexture();
+            } else {
+                renderer->srgbCorrectionPass->Initialize(width, height, encodingGamma);
+                renderer->streamRenderTexture =
+                    renderer->srgbCorrectionPass->GetOutputTexture()->GetGLTexture();
+            }
         }
     }
 
@@ -609,7 +632,11 @@ void ovrRenderer_Create(ovrRenderer *renderer,
     renderer->lobbyScene = new GltfModel();
     renderer->lobbyScene->load();
 
-    ovrProgram_Create(&renderer->streamProgram, VERTEX_SHADER, FRAGMENT_SHADER, STREAMER_PROG);
+    ovrProgram_Create(
+        &renderer->streamProgram,
+        VERTEX_SHADER,
+        renderer->useExternalStreamTexture ? FRAGMENT_EXTERNAL_OES_SHADER : FRAGMENT_SHADER,
+        STREAMER_PROG);
 
     ovrProgram_Create(
         &renderer->lobbyProgram, LOBBY_VERTEX_SHADER, LOBBY_FRAGMENT_SHADER, LOBBY_PROG);
@@ -692,14 +719,16 @@ void renderEye(
 
         GL(glUniform1f(renderer->streamProgram.UniformLocation[UNIFORM_ALPHA], 2.0f));
         GL(glActiveTexture(GL_TEXTURE0));
-        GL(glBindTexture(GL_TEXTURE_2D, renderer->streamRenderTexture));
+        const GLenum streamTextureTarget =
+            renderer->useExternalStreamTexture ? GL_TEXTURE_EXTERNAL_OES : GL_TEXTURE_2D;
+        GL(glBindTexture(streamTextureTarget, renderer->streamRenderTexture));
 
         GL(glDrawElements(GL_TRIANGLES, renderer->Panel.IndexCount, GL_UNSIGNED_SHORT, NULL));
 
         GL(glBindVertexArray(0));
 
         GL(glActiveTexture(GL_TEXTURE0));
-        GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, 0));
+        GL(glBindTexture(streamTextureTarget, 0));
         GL(glActiveTexture(GL_TEXTURE1));
         GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, 0));
     }
@@ -894,25 +923,30 @@ void renderLobbyNative(const FfiViewInput eyeInputs[2]) {
 void renderStreamNative(void *streamHardwareBuffer, const unsigned int swapchainIndices[2]) {
     auto renderer = g_ctx.streamRenderer.get();
 
+    EGLImageKHR image = EGL_NO_IMAGE_KHR;
     if (streamHardwareBuffer != 0) {
         GL(EGLClientBuffer clientBuffer =
                eglGetNativeClientBufferANDROID((const AHardwareBuffer *)streamHardwareBuffer));
-        GL(EGLImageKHR image = eglCreateImageKHR(
+        GL(image = eglCreateImageKHR(
                g_ctx.eglDisplay, EGL_NO_CONTEXT, EGL_NATIVE_BUFFER_ANDROID, clientBuffer, nullptr));
 
         GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, g_ctx.streamTexture->GetGLTexture()));
         GL(glEGLImageTargetTexture2DOES(GL_TEXTURE_EXTERNAL_OES, (GLeglImageOES)image));
 
-        renderer->srgbCorrectionPass->Render();
-        if (renderer->enableFFE) {
-            renderer->ffr->Render();
+        if (!renderer->useExternalStreamTexture) {
+            renderer->srgbCorrectionPass->Render();
+            if (renderer->enableFFE) {
+                renderer->ffr->Render();
+            }
         }
-
-        GL(eglDestroyImageKHR(g_ctx.eglDisplay, image));
     }
 
     FfiViewInput eyeInputs[2] = {};
     eyeInputs[0].swapchainIndex = swapchainIndices[0];
     eyeInputs[1].swapchainIndex = swapchainIndices[1];
     ovrRenderer_RenderFrame(renderer, eyeInputs, false);
+
+    if (image != EGL_NO_IMAGE_KHR) {
+        GL(eglDestroyImageKHR(g_ctx.eglDisplay, image));
+    }
 }

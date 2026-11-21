@@ -65,10 +65,16 @@ impl VideoDecoderSink {
                         )
                     };
 
-                    // NB: the function expects the timestamp in micros, but nanos is used to have
-                    // complete precision, so when converted back to Duration it can compare
-                    // correctly to other Durations
-                    decoder.queue_input_buffer(buffer, 0, data.len(), timestamp.as_nanos() as _, 0)?;
+                    // AMediaCodec expects presentation timestamps in microseconds.
+                    // AImage timestamps are returned in nanoseconds, so passing
+                    // microseconds preserves the value used for frame matching.
+                    decoder.queue_input_buffer(
+                        buffer,
+                        0,
+                        data.len(),
+                        timestamp.as_micros() as u64,
+                        0,
+                    )?;
 
                     Ok(true)
                 }

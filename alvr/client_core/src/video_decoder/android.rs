@@ -326,11 +326,7 @@ fn decoder_lifecycle(
     while running.value() {
         match decoder.dequeue_output_buffer(Duration::from_millis(1)) {
             Ok(DequeuedOutputBufferInfoResult::Buffer(buffer)) => {
-                // The buffer timestamp is actually nanoseconds
-                let presentation_time_ns = buffer.info().presentation_time_us();
-
-                if let Err(e) = decoder.release_output_buffer_at_time(buffer, presentation_time_ns)
-                {
+                if let Err(e) = decoder.release_output_buffer(buffer, true) {
                     error!("Decoder dequeue error: {e}");
                 }
             }

@@ -166,7 +166,7 @@ const float IPD_EPS = 0.001; // minimum change of IPD to be registered as a new 
 const GLenum SWAPCHAIN_FORMAT = GL_RGBA8;
 
 static float g_fTrackingOffset = 0.f;//FIXME!
-constexpr bool ENABLE_STREAM_REPROJECTION_AB_TEST = true;
+constexpr bool ENABLE_STREAM_REPROJECTION_AB_TEST = false;
 
 static Jerk_Estimation leftHandJerkEstimation[3];
 static Jerk_Estimation rightHandJerkEstimation[3];

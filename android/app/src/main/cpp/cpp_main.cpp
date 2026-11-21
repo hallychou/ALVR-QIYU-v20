@@ -166,6 +166,7 @@ const float IPD_EPS = 0.001; // minimum change of IPD to be registered as a new 
 const GLenum SWAPCHAIN_FORMAT = GL_RGBA8;
 
 static float g_fTrackingOffset = 0.f;//FIXME!
+constexpr bool ENABLE_STREAM_REPROJECTION_AB_TEST = true;
 
 static Jerk_Estimation leftHandJerkEstimation[3];
 static Jerk_Estimation rightHandJerkEstimation[3];
@@ -520,6 +521,20 @@ AlvrFov getFov(qiyu_DeviceInfo* di, int eye) {
     fov.down = (float) atan(pFrust->bottom / pFrust->near);
 
     return fov;
+}
+
+static AlvrQuat getReprojectionRotation(
+    const qiyu_Quaternion& inputRotation, const qiyu_Quaternion& outputRotation) {
+    return AlvrQuat{
+        outputRotation.w * inputRotation.x - outputRotation.x * inputRotation.w
+            - outputRotation.y * inputRotation.z + outputRotation.z * inputRotation.y,
+        outputRotation.w * inputRotation.y + outputRotation.x * inputRotation.z
+            - outputRotation.y * inputRotation.w - outputRotation.z * inputRotation.x,
+        outputRotation.w * inputRotation.z - outputRotation.x * inputRotation.y
+            + outputRotation.y * inputRotation.x - outputRotation.z * inputRotation.w,
+        outputRotation.w * inputRotation.w + outputRotation.x * inputRotation.x
+            + outputRotation.y * inputRotation.y + outputRotation.z * inputRotation.z,
+    };
 }
 
 static inline float getInterpupillaryDistance(qiyu_DeviceInfo* di) {
@@ -996,6 +1011,8 @@ Java_alvr_client_VRActivity_onStreamStartNative(JNIEnv *_env, jobject _context) 
     diag("[STREAM] view=%ux%u refresh=%.1f foveated=%d hdr=%d", CTX.streamViewWidth,
          CTX.streamViewHeight, CTX.refreshRate, CTX.enableFoveatedEncoding ? 1 : 0,
          CTX.enableHdr ? 1 : 0);
+    diag("[STREAM-REPROJECT] client rotation reprojection=%d",
+         ENABLE_STREAM_REPROJECTION_AB_TEST ? 1 : 0);
     if (CTX.streamViewWidth > 2048) {
         error("[STREAM] per-eye width %u means a %u-wide video; QIYU decoders are limited to "
               "4096px. Lower the server transcoding resolution to 2048 or use scale mode.",
@@ -1094,6 +1111,7 @@ Java_alvr_client_VRActivity_onPauseNative(JNIEnv *_env, jobject _context) {
 extern "C" JNIEXPORT void JNICALL
 Java_alvr_client_VRActivity_renderNative(JNIEnv *_env, jobject _context) {
     qiyu_HeadPoseState tracking;
+    qiyu_HeadPoseState submitTracking;
     qiyu_FrameParam frameParam;
     memset(&frameParam, 0, sizeof(frameParam));
 
@@ -1110,9 +1128,7 @@ Java_alvr_client_VRActivity_renderNative(JNIEnv *_env, jobject _context) {
         if (!alvr_get_frame(&timestampNs, &streamHardwareBuffer)) {
             return;
         }
-        // Fetch the view parameters negotiated with the server. The pose is unused by the C API
-        // stream renderer (only FoV and reprojection rotation are consumed), the FoV may have
-        // been adjusted by the server for canting.
+        // Fetch the source FoV negotiated with the server; it may be adjusted for canting.
         AlvrViewParams viewParams[2] = {};
         alvr_report_compositor_start(timestampNs, viewParams);
         if (viewParams[0].fov.left == 0.f && viewParams[0].fov.right == 0.f
@@ -1144,6 +1160,10 @@ Java_alvr_client_VRActivity_renderNative(JNIEnv *_env, jobject _context) {
             }
         }
 
+        const auto displayTracking = qiyu_PredictHeadPose(qiyu_PredictDisplayTime());
+        const bool reprojectStream = ENABLE_STREAM_REPROJECTION_AB_TEST && trackingFound;
+        submitTracking = reprojectStream ? displayTracking : tracking;
+
         static int frameLogCounter = 0;
         if (frameLogCounter++ < 10 || frameLogCounter % 300 == 0) {
             diag("[FRAME] ts_ns=%llu match=%d fov=(%.2f,%.2f,%.2f,%.2f) queue=%d",
@@ -1155,7 +1175,6 @@ Java_alvr_client_VRActivity_renderNative(JNIEnv *_env, jobject _context) {
 
         static int poseLogCounter = 0;
         if (poseLogCounter++ % 6 == 0 && trackingFound) {
-            const auto displayTracking = qiyu_PredictHeadPose(qiyu_PredictDisplayTime());
             const auto &frameRotation = tracking.pose.rotation;
             const auto &displayRotation = displayTracking.pose.rotation;
             const float rotationDot = std::clamp(
@@ -1185,7 +1204,10 @@ Java_alvr_client_VRActivity_renderNative(JNIEnv *_env, jobject _context) {
         AlvrStreamViewParams streamViewParams[2] = {};
         for (int eye = 0; eye < 2; eye++) {
             streamViewParams[eye].swapchain_index = CTX.streamBuffers[eye].index;
-            streamViewParams[eye].reprojection_rotation = AlvrQuat{0.f, 0.f, 0.f, 1.f};
+            streamViewParams[eye].reprojection_rotation =
+                reprojectStream
+                ? getReprojectionRotation(tracking.pose.rotation, displayTracking.pose.rotation)
+                : AlvrQuat{0.f, 0.f, 0.f, 1.f};
             streamViewParams[eye].fov = viewParams[eye].fov;
         }
 
@@ -1249,10 +1271,11 @@ Java_alvr_client_VRActivity_renderNative(JNIEnv *_env, jobject _context) {
             frameParam.renderLayers[eye].eyeMask = eye ? RL_EyeMask_Right : RL_EyeMask_Left;
             CTX.lobbyBuffers[eye].index = (CTX.lobbyBuffers[eye].index + 1) % NUM_EYE_BUFFERS_;
         }
+        submitTracking = tracking;
     }
 
     frameParam.minVsyncs = 1;
-    frameParam.headPoseState = tracking;
+    frameParam.headPoseState = submitTracking;
 
     qiyu_SubmitFrame(frameParam);
 

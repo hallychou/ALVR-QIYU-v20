@@ -907,7 +907,34 @@ pub unsafe extern "C" fn alvr_render_stream_opengl(
 
     opengl::render_stream(
         hardware_buffer,
-        [left_params.swapchain_index, right_params.swapchain_index],
+        [
+            opengl::FfiStreamViewInput {
+                reprojection_rotation: [
+                    left_params.reprojection_rotation.x,
+                    left_params.reprojection_rotation.y,
+                    left_params.reprojection_rotation.z,
+                    left_params.reprojection_rotation.w,
+                ],
+                fov_left: left_params.fov.left,
+                fov_right: left_params.fov.right,
+                fov_up: left_params.fov.up,
+                fov_down: left_params.fov.down,
+                swapchain_index: left_params.swapchain_index,
+            },
+            opengl::FfiStreamViewInput {
+                reprojection_rotation: [
+                    right_params.reprojection_rotation.x,
+                    right_params.reprojection_rotation.y,
+                    right_params.reprojection_rotation.z,
+                    right_params.reprojection_rotation.w,
+                ],
+                fov_left: right_params.fov.left,
+                fov_right: right_params.fov.right,
+                fov_up: right_params.fov.up,
+                fov_down: right_params.fov.down,
+                swapchain_index: right_params.swapchain_index,
+            },
+        ],
     );
 }
 

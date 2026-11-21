@@ -708,7 +708,8 @@ void renderEye(
         GL(glBindVertexArray(0));
         GL(glBindTexture(GL_TEXTURE_2D, 0));
     } else {
-        GL(glClear(GL_DEPTH_BUFFER_BIT));
+        GL(glClearColor(0.0f, 0.0f, 0.0f, 1.0f));
+        GL(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
 
         GL(glBindVertexArray(renderer->Panel.VertexArrayObject));
 
@@ -761,8 +762,30 @@ void ovrRenderer_RenderFrame(ovrRenderer *renderer, const FfiViewInput input[2],
             mvpMatrix[eye] = glm::transpose(proj * viewInv);
         }
     } else {
-        mvpMatrix[0] = glm::mat4(1.0);
-        mvpMatrix[1] = glm::mat4(1.0);
+        for (int eye = 0; eye < 2; eye++) {
+            const auto tanl = tan(input[eye].fovLeft);
+            const auto tanr = tan(input[eye].fovRight);
+            const auto tant = tan(input[eye].fovUp);
+            const auto tanb = tan(input[eye].fovDown);
+            const auto a = 2 / (tanr - tanl);
+            const auto b = 2 / (tant - tanb);
+            const auto c = (tanr + tanl) / (tanr - tanl);
+            const auto d = (tant + tanb) / (tant - tanb);
+            auto proj = glm::mat4(
+                a, 0.f, c, 0.f, 0.f, b, d, 0.f, 0.f, 0.f, -1.f, -2 * NEAR, 0.f, 0.f, -1.f, 0.f);
+            proj = glm::transpose(proj);
+
+            const auto model =
+                glm::translate(glm::mat4(1.0),
+                               glm::vec3((tanr + tanl) * 0.5f, (tant + tanb) * 0.5f, -1.0f))
+                * glm::scale(glm::mat4(1.0),
+                             glm::vec3((tanr - tanl) * 0.5f, (tant - tanb) * 0.5f, 1.0f));
+            const auto &q = input[eye].orientation;
+            const auto reprojection =
+                glm::mat4_cast(glm::quat(q[3], q[0], q[1], q[2]));
+
+            mvpMatrix[eye] = glm::transpose(proj * reprojection * model);
+        }
     }
 
     // Render the eye images.
@@ -920,7 +943,7 @@ void renderLobbyNative(const FfiViewInput eyeInputs[2]) {
     ovrRenderer_RenderFrame(g_ctx.lobbyRenderer.get(), eyeInputs, true);
 }
 
-void renderStreamNative(void *streamHardwareBuffer, const unsigned int swapchainIndices[2]) {
+void renderStreamNative(void *streamHardwareBuffer, const FfiStreamViewInput eyeInputs[2]) {
     auto renderer = g_ctx.streamRenderer.get();
 
     EGLImageKHR image = EGL_NO_IMAGE_KHR;
@@ -941,10 +964,19 @@ void renderStreamNative(void *streamHardwareBuffer, const unsigned int swapchain
         }
     }
 
-    FfiViewInput eyeInputs[2] = {};
-    eyeInputs[0].swapchainIndex = swapchainIndices[0];
-    eyeInputs[1].swapchainIndex = swapchainIndices[1];
-    ovrRenderer_RenderFrame(renderer, eyeInputs, false);
+    FfiViewInput renderInputs[2] = {};
+    for (int eye = 0; eye < 2; eye++) {
+        for (int component = 0; component < 4; component++) {
+            renderInputs[eye].orientation[component] =
+                eyeInputs[eye].reprojectionRotation[component];
+        }
+        renderInputs[eye].fovLeft = eyeInputs[eye].fovLeft;
+        renderInputs[eye].fovRight = eyeInputs[eye].fovRight;
+        renderInputs[eye].fovUp = eyeInputs[eye].fovUp;
+        renderInputs[eye].fovDown = eyeInputs[eye].fovDown;
+        renderInputs[eye].swapchainIndex = eyeInputs[eye].swapchainIndex;
+    }
+    ovrRenderer_RenderFrame(renderer, renderInputs, false);
 
     if (image != EGL_NO_IMAGE_KHR) {
         GL(eglDestroyImageKHR(g_ctx.eglDisplay, image));

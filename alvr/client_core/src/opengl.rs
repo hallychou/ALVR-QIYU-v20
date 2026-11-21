@@ -39,6 +39,17 @@ struct FfiViewInput {
 
 #[repr(C)]
 #[derive(Clone, Copy)]
+pub(crate) struct FfiStreamViewInput {
+    pub(crate) reprojection_rotation: [f32; 4],
+    pub(crate) fov_left: f32,
+    pub(crate) fov_right: f32,
+    pub(crate) fov_up: f32,
+    pub(crate) fov_down: f32,
+    pub(crate) swapchain_index: u32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
 struct FfiStreamConfig {
     view_width: u32,
     view_height: u32,
@@ -73,7 +84,10 @@ unsafe extern "C" {
     fn streamStartNative(config: FfiStreamConfig);
     fn updateLobbyHudTexture(data: *const u8);
     fn renderLobbyNative(eye_inputs: *const FfiViewInput);
-    fn renderStreamNative(stream_hardware_buffer: *mut c_void, swapchain_indices: *const u32);
+    fn renderStreamNative(
+        stream_hardware_buffer: *mut c_void,
+        eye_inputs: *const FfiStreamViewInput,
+    );
 }
 
 pub struct RenderViewInput {
@@ -267,9 +281,9 @@ pub fn render_lobby(view_inputs: [RenderViewInput; 2]) {
     }
 }
 
-pub fn render_stream(hardware_buffer: *mut c_void, swapchain_indices: [u32; 2]) {
+pub fn render_stream(hardware_buffer: *mut c_void, eye_inputs: [FfiStreamViewInput; 2]) {
     #[cfg(target_os = "android")]
     unsafe {
-        renderStreamNative(hardware_buffer, swapchain_indices.as_ptr());
+        renderStreamNative(hardware_buffer, eye_inputs.as_ptr());
     }
 }

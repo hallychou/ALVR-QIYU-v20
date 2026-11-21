@@ -10,6 +10,15 @@ struct FfiViewInput {
     unsigned int swapchainIndex;
 };
 
+struct FfiStreamViewInput {
+    float reprojectionRotation[4]; // output-view rotation inverse * input-view rotation
+    float fovLeft;
+    float fovRight;
+    float fovUp;
+    float fovDown;
+    unsigned int swapchainIndex;
+};
+
 struct FfiStreamConfig {
     unsigned int viewWidth;
     unsigned int viewHeight;
@@ -43,4 +52,4 @@ extern "C" void streamStartNative(FfiStreamConfig config);
 extern "C" void updateLobbyHudTexture(const unsigned char *data);
 extern "C" void renderLobbyNative(const FfiViewInput eyeInputs[2]);
 extern "C" void renderStreamNative(void *streamHardwareBuffer,
-                                   const unsigned int swapchainIndices[2]);
+                                   const FfiStreamViewInput eyeInputs[2]);

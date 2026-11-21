@@ -55,7 +55,7 @@ impl VideoDecoderSink {
         };
 
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| -> Result<bool> {
-            match decoder.dequeue_input_buffer(Duration::ZERO) {
+            match decoder.dequeue_input_buffer(Duration::from_millis(500)) {
                 Ok(DequeuedInputBufferResult::Buffer(mut buffer)) => {
                     unsafe {
                         ptr::copy_nonoverlapping(

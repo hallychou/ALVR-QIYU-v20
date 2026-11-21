@@ -698,7 +698,6 @@ void eventsThread() {
             AlvrDeviceMotion headMotion = {};
             uint64_t predictionOffsetNs = alvr_get_prediction_offset_ns();
             uint64_t pollTimestampNs = getTimestampNs();
-            uint64_t targetTimestampNs = pollTimestampNs + predictionOffsetNs;
             auto headTracking =
                     qiyu_PredictHeadPose((float) predictionOffsetNs / 1e6);
             headMotion.device_id = HEAD_ID;
@@ -715,7 +714,10 @@ void eventsThread() {
             {
                 std::lock_guard<std::mutex> lock(CTX.trackingFrameMutex);
                 // Insert from the front: it will be searched first
-                CTX.trackingFrameMap.push_front({targetTimestampNs, headTracking});
+                // The tracking packet is sent with pollTimestampNs as its frame identity.
+                // Keep the frame-pose history keyed by the same timestamp to avoid future
+                // poses being selected for the wrong stream frame.
+                CTX.trackingFrameMap.push_front({pollTimestampNs, headTracking});
                 if (CTX.trackingFrameMap.size() > MAXIMUM_TRACKING_FRAMES) {
                     CTX.trackingFrameMap.pop_back();
                 }

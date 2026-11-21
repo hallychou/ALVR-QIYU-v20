@@ -1154,7 +1154,7 @@ Java_alvr_client_VRActivity_renderNative(JNIEnv *_env, jobject _context) {
         }
 
         static int poseLogCounter = 0;
-        if (poseLogCounter++ % 60 == 0 && trackingFound) {
+        if (poseLogCounter++ % 6 == 0 && trackingFound) {
             const auto displayTracking = qiyu_PredictHeadPose(qiyu_PredictDisplayTime());
             const auto &frameRotation = tracking.pose.rotation;
             const auto &displayRotation = displayTracking.pose.rotation;

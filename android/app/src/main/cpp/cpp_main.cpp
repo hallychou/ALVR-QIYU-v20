@@ -698,16 +698,17 @@ void eventsThread() {
             AlvrDeviceMotion headMotion = {};
             uint64_t predictionOffsetNs = alvr_get_prediction_offset_ns();
             uint64_t pollTimestampNs = getTimestampNs();
-            auto headTracking =
+            auto predictedHeadTracking =
                     qiyu_PredictHeadPose((float) predictionOffsetNs / 1e6);
+            auto rawHeadTracking = qiyu_PredictHeadPose(0.f);
             headMotion.device_id = HEAD_ID;
-            headMotion.pose.orientation.x = headTracking.pose.rotation.x;
-            headMotion.pose.orientation.y = headTracking.pose.rotation.y;
-            headMotion.pose.orientation.z = headTracking.pose.rotation.z;
-            headMotion.pose.orientation.w = -headTracking.pose.rotation.w;
-            headMotion.pose.position[0] = -headTracking.pose.position.x;
-            headMotion.pose.position[1] = -headTracking.pose.position.y - g_fTrackingOffset;
-            headMotion.pose.position[2] = -headTracking.pose.position.z;
+            headMotion.pose.orientation.x = rawHeadTracking.pose.rotation.x;
+            headMotion.pose.orientation.y = rawHeadTracking.pose.rotation.y;
+            headMotion.pose.orientation.z = rawHeadTracking.pose.rotation.z;
+            headMotion.pose.orientation.w = -rawHeadTracking.pose.rotation.w;
+            headMotion.pose.position[0] = -rawHeadTracking.pose.position.x;
+            headMotion.pose.position[1] = -rawHeadTracking.pose.position.y - g_fTrackingOffset;
+            headMotion.pose.position[2] = -rawHeadTracking.pose.position.z;
             // Note: do not copy velocities. Avoid reprojection in SteamVR
             motionVec.push_back(headMotion);
 
@@ -717,7 +718,7 @@ void eventsThread() {
                 // The tracking packet is sent with pollTimestampNs as its frame identity.
                 // Keep the frame-pose history keyed by the same timestamp to avoid future
                 // poses being selected for the wrong stream frame.
-                CTX.trackingFrameMap.push_front({pollTimestampNs, headTracking});
+                CTX.trackingFrameMap.push_front({pollTimestampNs, predictedHeadTracking});
                 if (CTX.trackingFrameMap.size() > MAXIMUM_TRACKING_FRAMES) {
                     CTX.trackingFrameMap.pop_back();
                 }

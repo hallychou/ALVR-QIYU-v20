@@ -1174,7 +1174,7 @@ Java_alvr_client_VRActivity_renderNative(JNIEnv *_env, jobject _context) {
                  (unsigned long long) timestampNs,
                  (unsigned long long) matchedTrackingTimestampNs,
                  (timestampNs - matchedTrackingTimestampNs) / 1e6,
-                 (unsigned long long) tracking.pose.poseTimeStampNs,
+                 (unsigned long long) tracking.poseTimeStampNs,
                  (unsigned long long) tracking.expectedDisplayTimeNs,
                  (unsigned long long) displayTracking.expectedDisplayTimeNs,
                  frameRotation.x, frameRotation.y, frameRotation.z, frameRotation.w,

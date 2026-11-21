@@ -525,15 +525,23 @@ AlvrFov getFov(qiyu_DeviceInfo* di, int eye) {
 
 static AlvrQuat getReprojectionRotation(
     const qiyu_Quaternion& inputRotation, const qiyu_Quaternion& outputRotation) {
+    const AlvrQuat input{
+        inputRotation.x, inputRotation.y, inputRotation.z, -inputRotation.w};
+    const AlvrQuat output{
+        outputRotation.x, outputRotation.y, outputRotation.z, -outputRotation.w};
+    const float inverseOutputX = -output.x;
+    const float inverseOutputY = -output.y;
+    const float inverseOutputZ = -output.z;
+
     return AlvrQuat{
-        outputRotation.w * inputRotation.x - outputRotation.x * inputRotation.w
-            - outputRotation.y * inputRotation.z + outputRotation.z * inputRotation.y,
-        outputRotation.w * inputRotation.y + outputRotation.x * inputRotation.z
-            - outputRotation.y * inputRotation.w - outputRotation.z * inputRotation.x,
-        outputRotation.w * inputRotation.z - outputRotation.x * inputRotation.y
-            + outputRotation.y * inputRotation.x - outputRotation.z * inputRotation.w,
-        outputRotation.w * inputRotation.w + outputRotation.x * inputRotation.x
-            + outputRotation.y * inputRotation.y + outputRotation.z * inputRotation.z,
+        output.w * input.x + inverseOutputX * input.w + inverseOutputY * input.z
+            - inverseOutputZ * input.y,
+        output.w * input.y - inverseOutputX * input.z + inverseOutputY * input.w
+            + inverseOutputZ * input.x,
+        output.w * input.z + inverseOutputX * input.y - inverseOutputY * input.x
+            + inverseOutputZ * input.w,
+        output.w * input.w - inverseOutputX * input.x - inverseOutputY * input.y
+            - inverseOutputZ * input.z,
     };
 }
 

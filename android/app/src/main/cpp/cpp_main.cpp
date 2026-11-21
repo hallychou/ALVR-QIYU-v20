@@ -1123,6 +1123,7 @@ Java_alvr_client_VRActivity_renderNative(JNIEnv *_env, jobject _context) {
         }
 
         bool trackingFound = false;
+        uint64_t matchedTrackingTimestampNs = 0;
         {
             std::lock_guard<std::mutex> lock(CTX.trackingFrameMutex);
 
@@ -1135,6 +1136,7 @@ Java_alvr_client_VRActivity_renderNative(JNIEnv *_env, jobject _context) {
                 for (auto &pair: CTX.trackingFrameMap) {
                     if (pair.first <= timestampNs) {
                         tracking = pair.second;
+                        matchedTrackingTimestampNs = pair.first;
                         trackingFound = true;
                         break;
                     }
@@ -1149,6 +1151,35 @@ Java_alvr_client_VRActivity_renderNative(JNIEnv *_env, jobject _context) {
                  viewParams[0].fov.left, viewParams[0].fov.right,
                  viewParams[0].fov.up, viewParams[0].fov.down,
                  (int) CTX.trackingFrameMap.size());
+        }
+
+        static int poseLogCounter = 0;
+        if (poseLogCounter++ % 60 == 0 && trackingFound) {
+            const auto displayTracking = qiyu_PredictHeadPose(qiyu_PredictDisplayTime());
+            const auto &frameRotation = tracking.pose.rotation;
+            const auto &displayRotation = displayTracking.pose.rotation;
+            const float rotationDot = std::clamp(
+                std::abs(frameRotation.x * displayRotation.x
+                         + frameRotation.y * displayRotation.y
+                         + frameRotation.z * displayRotation.z
+                         + frameRotation.w * displayRotation.w),
+                0.0f,
+                1.0f);
+            const float rotationDeltaDegrees =
+                2.0f * std::acos(rotationDot) * 180.0f / 3.14159265f;
+            diag("[FRAME-POSE] frame_ts=%llu map_ts=%llu age_ms=%.2f "
+                 "pose_ts=%llu expected=%llu display_expected=%llu "
+                 "frame_q=(%.3f,%.3f,%.3f,%.3f) display_q=(%.3f,%.3f,%.3f,%.3f) "
+                 "delta_deg=%.2f",
+                 (unsigned long long) timestampNs,
+                 (unsigned long long) matchedTrackingTimestampNs,
+                 (timestampNs - matchedTrackingTimestampNs) / 1e6,
+                 (unsigned long long) tracking.pose.poseTimeStampNs,
+                 (unsigned long long) tracking.expectedDisplayTimeNs,
+                 (unsigned long long) displayTracking.expectedDisplayTimeNs,
+                 frameRotation.x, frameRotation.y, frameRotation.z, frameRotation.w,
+                 displayRotation.x, displayRotation.y, displayRotation.z, displayRotation.w,
+                 rotationDeltaDegrees);
         }
 
         AlvrStreamViewParams streamViewParams[2] = {};

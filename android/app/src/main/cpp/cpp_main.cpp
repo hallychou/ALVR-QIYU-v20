@@ -775,7 +775,7 @@ void eventsThread() {
             }
 
             // QIYU does not provide a hand skeleton or eye gaze APIs, pass null.
-            alvr_send_tracking(pollTimestampNs, motionVec.data(), motionVec.size(), nullptr,
+            alvr_send_tracking(targetTimestampNs, motionVec.data(), motionVec.size(), nullptr,
                                nullptr);
 
             if (trackingLogCounter++ % 600 == 0) {

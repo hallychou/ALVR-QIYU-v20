@@ -825,7 +825,7 @@ void eventsThread() {
                     : 0.f;
                 // Defer stop requests until an active pulse has met its minimum duration.
                 const float amplitude = std::isfinite(haptics.amplitude) && haptics.amplitude > 0.f
-                    ? std::max(0.2f, std::min(haptics.amplitude, 1.f))
+                    ? std::max(0.25f, std::min(haptics.amplitude, 1.f))
                     : 0.f;
                 if (durationSeconds == 0.f || amplitude == 0.f) {
                     s.stopPending = true;

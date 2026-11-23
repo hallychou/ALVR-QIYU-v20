@@ -591,7 +591,7 @@ void updateHapticsState() {
     constexpr uint64_t MAX_SDK_HAPTIC_DURATION_US = 4'000'000;
     // Keep SDK commands alive across frame-rate updates; endUs remains the logical stop deadline.
     constexpr uint64_t MIN_SDK_HAPTIC_DURATION_US = 250'000;
-    constexpr uint64_t MIN_HAPTIC_DURATION_US = 20'000;
+    constexpr uint64_t MIN_HAPTIC_DURATION_US = 25'000;
     constexpr uint64_t SDK_HAPTIC_REFRESH_MARGIN_US = 20'000;
     const uint64_t currentUs = getTimestampNs() / 1000;
     std::lock_guard<std::mutex> lock(CTX.hapticsMutex);

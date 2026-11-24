@@ -20,7 +20,8 @@
    - `....apk`（Stable）：包名 `alvr.client.quest`，如已装旧版 ALVR-QIYU 需先卸载；
 3. 在 Streamer 的 Video 设置中把转码分辨率设为 **2048（或启用 Scale 100%）**——
    QIYU 硬件解码器不支持默认的 4288px 宽码流，否则会解码失败循环重连；
-4. 首次运行允许麦克风权限，同一网络下在 Streamer 中信任设备即可。
+4. 在 Streamer 的 Headset 设置中把 Prediction 改为 **3.00 frames**，可以降低奇遇手柄追踪抖动；
+5. 首次运行允许麦克风权限，同一网络下在 Streamer 中信任设备即可。
 
 ## 从源码构建 / 迁移说明
 
